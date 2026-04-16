@@ -1,0 +1,90 @@
+export default async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-api-key');
+
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+
+  const apiKey = req.headers['x-api-key'];
+  if (!apiKey) return res.status(400).json({ error: 'Missing API key' });
+
+  // Test mode - just verify the API key works
+  if (req.body && req.body.test) {
+    try {
+      const r = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 10, messages: [{ role: 'user', content: 'Hi' }] })
+      });
+      const d = await r.json();
+      if (d.error) return res.status(400).json({ error: d.error.message });
+      return res.status(200).json({ ok: true });
+    } catch(e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
+  const { url } = req.body;
+  if (!url) return res.status(400).json({ error: 'Missing url' });
+
+  try {
+    // Step 1: Fetch the Clarity page directly server-side (no CORS issues here)
+    const pageRes = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml',
+        'Accept-Language': 'de-DE,de;q=0.9',
+      }
+    });
+
+    const html = await pageRes.text();
+
+    // Step 2: Extract insight with regex first (free, no AI tokens needed)
+    const patterns = [
+      /Der Nutzer[^<]{20,800}/,
+      /Die Nutzerin[^<]{20,800}/,
+      /Der Besucher[^<]{20,800}/,
+      /Die Besucherin[^<]{20,800}/,
+    ];
+
+    let insight = null;
+    for (const pattern of patterns) {
+      const match = html.match(pattern);
+      if (match) {
+        insight = match[0]
+          .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+          .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, ' ')
+          .trim().substring(0, 700);
+        break;
+      }
+    }
+
+    // Step 3: Only call Claude if regex failed — use Haiku (cheapest) with just the relevant HTML snippet
+    if (!insight) {
+      const bodyStart = html.indexOf('<body');
+      const relevantHtml = bodyStart > -1 ? html.substring(bodyStart, bodyStart + 6000) : html.substring(0, 6000);
+
+      const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 400,
+          system: 'Extract ONLY the Sitzungserkenntnisse paragraph from this HTML — a German summary starting with "Der Nutzer", "Die Nutzerin", "Der Besucher" or similar. Return ONLY that text. If not found return: NOT_FOUND',
+          messages: [{ role: 'user', content: relevantHtml }]
+        })
+      });
+
+      const claudeData = await claudeRes.json();
+      if (claudeData.error) return res.status(500).json({ error: claudeData.error.message });
+      const text = claudeData.content?.filter(b => b.type === 'text').map(b => b.text).join('').trim();
+      if (text && text !== 'NOT_FOUND') insight = text;
+    }
+
+    return res.status(200).json({ insight: insight || null });
+
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+}
