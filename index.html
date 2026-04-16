@@ -715,16 +715,16 @@ async function testApiKey() {
       headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
       body: JSON.stringify({ test: true })
     });
-    const d = await r.json();
-    if (d.error) { log('err', 'TEST', 'API error: ' + d.error.message); return; }
-    log('ok', 'TEST', '✓ API key works! Ready to extract insights.');
+    const rawText = await r.text();
+    log('system', 'TEST', 'Raw response: ' + rawText.substring(0, 150));
+    let d;
+    try { d = JSON.parse(rawText); } catch(e) {
+      log('err', 'TEST', 'Could not parse response: ' + rawText.substring(0, 100));
+      return;
+    }
+    if (d.error) { log('err', 'TEST', 'API error: ' + d.error); return; }
+    if (d.ok) log('ok', 'TEST', '✓ API key works! Ready to extract insights.');
+    else log('warn', 'TEST', 'Unexpected response: ' + JSON.stringify(d));
   } catch(e) {
-    log('err', 'TEST', 'Failed: ' + e.message);
+    log('err', 'TEST', 'Network error: ' + e.message);
   }
-}
-
-// Init
-log('system', 'INIT', 'App ready — upload a CSV to begin');
-</script>
-</body>
-</html>
