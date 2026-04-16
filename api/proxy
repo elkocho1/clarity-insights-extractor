@@ -1,4 +1,4 @@
-module.exports = async function handler(req, res) {
+export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-api-key');
@@ -16,21 +16,12 @@ module.exports = async function handler(req, res) {
     return res.status(400).json({ error: 'Invalid JSON' });
   }
  
-  // Test mode
   if (body.test) {
     try {
       const r = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01'
-        },
-        body: JSON.stringify({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 10,
-          messages: [{ role: 'user', content: 'Hi' }]
-        })
+        headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 10, messages: [{ role: 'user', content: 'Hi' }] })
       });
       const d = await r.json();
       if (d.error) return res.status(200).json({ ok: false, error: d.error.message });
@@ -40,7 +31,6 @@ module.exports = async function handler(req, res) {
     }
   }
  
-  // Extraction mode
   const { url } = body;
   if (!url) return res.status(400).json({ error: 'Missing url' });
  
@@ -54,21 +44,12 @@ module.exports = async function handler(req, res) {
     });
     const html = await pageRes.text();
  
-    const patterns = [
-      /Der Nutzer[^<]{20,800}/,
-      /Die Nutzerin[^<]{20,800}/,
-      /Der Besucher[^<]{20,800}/,
-      /Die Besucherin[^<]{20,800}/,
-    ];
- 
+    const patterns = [/Der Nutzer[^<]{20,800}/, /Die Nutzerin[^<]{20,800}/, /Der Besucher[^<]{20,800}/, /Die Besucherin[^<]{20,800}/];
     let insight = null;
     for (const pattern of patterns) {
       const match = html.match(pattern);
       if (match) {
-        insight = match[0]
-          .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
-          .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, ' ')
-          .trim().substring(0, 700);
+        insight = match[0].replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/\s+/g,' ').trim().substring(0,700);
         break;
       }
     }
@@ -78,11 +59,7 @@ module.exports = async function handler(req, res) {
       const relevantHtml = bodyStart > -1 ? html.substring(bodyStart, bodyStart + 5000) : html.substring(0, 5000);
       const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01'
-        },
+        headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
         body: JSON.stringify({
           model: 'claude-haiku-4-5-20251001',
           max_tokens: 400,
@@ -97,9 +74,7 @@ module.exports = async function handler(req, res) {
     }
  
     return res.status(200).json({ insight: insight || null });
- 
   } catch (err) {
     return res.status(200).json({ error: err.message });
   }
 }
- 
