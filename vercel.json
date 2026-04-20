@@ -1,4 +1,8 @@
 {
-  "buildCommand": "node inject-env.js",
-  "outputDirectory": "dist"
+  "rewrites": [
+    {
+      "source": "/api/anthropic/:path*",
+      "destination": "https://api.anthropic.com/:path*"
+    }
+  ]
 }
