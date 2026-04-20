@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clarity Insights Extractor</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Sora:wght@300;400;600;700&display=swap');
+  :root {
+    --bg: #0a0e1a;
+    --surface: #111827;
+    --surface2: #1a2235;
+    --border: #1e2d45;
+    --accent: #3b82f6;
+    --accent2: #06b6d4;
+    --success: #10b981;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --mono: 'JetBrains Mono', monospace;
+    --sans: 'Sora', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; padding: 32px 24px; }
+
+  h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; background: linear-gradient(135deg, #e2e8f0, #3b82f6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 4px; }
+  .subtitle { font-size: 13px; color: var(--muted); font-weight: 300; margin-bottom: 28px; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+  .card-title { font-size: 11px; font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+  .card-title::before { content: ''; display: block; width: 3px; height: 12px; background: var(--accent); border-radius: 2px; }
+
+  /* Steps */
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 24px; }
+  .step { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; position: relative; }
+  .step.active { border-color: var(--accent); }
+  .step.done { border-color: var(--success); }
+  .step-num { font-family: var(--mono); font-size: 10px; color: var(--muted); margin-bottom: 6px; }
+  .step-label { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 3px; }
+  .step-desc { font-size: 11px; color: var(--muted); }
+  .step-icon { position: absolute; top: 14px; right: 14px; font-size: 16px; }
+
+  /* Upload area */
+  .upload-area {
+    border: 2px dashed var(--border);
+    border-radius: 10px;
+    padding: 32px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+  }
+  .upload-area:hover, .upload-area.dragover { border-color: var(--accent); background: rgba(59,130,246,0.05); }
+  .upload-area input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .upload-icon { font-size: 32px; margin-bottom: 10px; }
+  .upload-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+  .upload-hint { font-size: 12px; color: var(--muted); }
+
+  /* Stats */
+  .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+  .stat { background: var(--surface2); border-radius: 10px; padding: 14px 16px; }
+  .stat-label { font-size: 11px; color: var(--muted); font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
+  .stat-value { font-size: 24px; font-weight: 700; font-family: var(--mono); }
+  .stat-value.accent { color: var(--accent); }
+  .stat-value.success { color: var(--success); }
+  .stat-value.warning { color: var(--warning); }
+
+  /* Progress */
+  .progress-header { display: flex; justify-content: space-between; font-size: 12px; font-family: var(--mono); color: var(--muted); margin-bottom: 8px; }
+  .progress-bg { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; margin-bottom: 8px; }
+  .progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 3px; transition: width 0.3s ease; width: 0%; }
+  .progress-status { font-size: 12px; font-family: var(--mono); color: var(--muted); min-height: 18px; }
+
+  /* API key */
+  .field-row { display: flex; gap: 10px; align-items: center; }
+  .field-row label { font-size: 12px; font-family: var(--mono); color: var(--muted); white-space: nowrap; }
+  .field-row input { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; font-family: var(--mono); font-size: 12px; color: var(--text); outline: none; }
+  .field-row input:focus { border-color: var(--accent); }
+
+  /* Controls */
+  .controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  button { font-family: var(--sans); font-size: 13px; font-weight: 600; padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; transition: all 0.15s; display: flex; align-items: center; gap: 7px; }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-primary:hover { background: #2563eb; transform: translateY(-1px); }
+  .btn-primary:disabled { background: var(--border); color: var(--muted); cursor: not-allowed; transform: none; }
+  .btn-success { background: var(--success); color: white; }
+  .btn-success:hover { background: #059669; }
+  .btn-success:disabled { background: var(--border); color: var(--muted); cursor: not-allowed; }
+  .btn-danger { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
+  .btn-danger:hover { background: rgba(239,68,68,0.1); }
+  .btn-danger:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-secondary:hover { background: var(--border); }
+
+  /* Mode badge */
+  .mode-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-family: var(--mono); font-weight: 500; }
+  .mode-direct { background: rgba(16,185,129,0.15); color: var(--success); border: 1px solid rgba(16,185,129,0.3); }
+  .mode-api { background: rgba(59,130,246,0.15); color: var(--accent); border: 1px solid rgba(59,130,246,0.3); }
+  .mode-idle { background: rgba(100,116,139,0.15); color: var(--muted); border: 1px solid rgba(100,116,139,0.3); }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .dot.pulse { animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.3} }
+
+  /* Log */
+  .log { background: var(--bg); border-radius: 8px; height: 180px; overflow-y: auto; padding: 10px; font-family: var(--mono); font-size: 11px; border: 1px solid var(--border); }
+  .log-entry { padding: 2px 0; border-bottom: 1px solid rgba(30,45,69,0.4); display: flex; gap: 8px; }
+  .log-time { color: var(--muted); min-width: 56px; flex-shrink: 0; }
+  .log-id { color: var(--accent2); min-width: 76px; flex-shrink: 0; }
+  .log-msg { color: var(--text); flex: 1; }
+  .log-msg.ok { color: var(--success); }
+  .log-msg.err { color: var(--danger); }
+  .log-msg.warn { color: var(--warning); }
+
+  /* Table */
+  .table-wrap { max-height: 380px; overflow-y: auto; border-radius: 0 0 10px 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { padding: 9px 12px; text-align: left; font-size: 10px; font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); background: var(--surface2); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 1; }
+  td { padding: 8px 12px; border-bottom: 1px solid rgba(30,45,69,0.4); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,0.02); }
+  .td-id { font-family: var(--mono); color: var(--accent2); font-size: 11px; white-space: nowrap; }
+  .td-ts { font-size: 11px; color: var(--muted); white-space: nowrap; }
+  .td-product { color: var(--muted); font-size: 11px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .td-insight { font-size: 11px; max-width: 320px; line-height: 1.5; }
+  .status-pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 10px; font-size: 10px; font-family: var(--mono); white-space: nowrap; }
+  .pill-done { background: rgba(16,185,129,0.15); color: var(--success); }
+  .pill-pending { background: rgba(100,116,139,0.1); color: var(--muted); }
+  .pill-active { background: rgba(59,130,246,0.15); color: var(--accent); animation: pulse 1s infinite; }
+  .pill-error { background: rgba(239,68,68,0.15); color: var(--danger); }
+  .pill-skip { background: rgba(245,158,11,0.1); color: var(--warning); }
+
+  .note { font-size: 11px; color: var(--muted); font-family: var(--mono); background: rgba(245,158,11,0.06); border: 1px solid rgba(245,158,11,0.15); border-radius: 8px; padding: 10px 14px; line-height: 1.6; }
+
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .empty-state { text-align: center; padding: 48px 24px; color: var(--muted); font-size: 13px; }
+  .empty-state .big { font-size: 36px; margin-bottom: 12px; }
+
+  .header-row { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 6px; }
+</style>
+</head>
+<body>
+
+<div class="header-row">
+  <div>
+    <h1>Clarity Insights Extractor</h1>
+    <div class="subtitle">Upload a sessions CSV → auto-extract Sitzungserkenntnisse → download enriched CSV</div>
+  </div>
+  <div id="mode-badge" class="mode-badge mode-idle"><span class="dot"></span> Idle</div>
+</div>
+
+<!-- Steps -->
+<div class="steps">
+  <div class="step active" id="step1">
+    <div class="step-num">Step 01</div>
+    <div class="step-label">Upload CSV</div>
+    <div class="step-desc">From Claude chat or previous export</div>
+    <div class="step-icon">📂</div>
+  </div>
+  <div class="step" id="step2">
+    <div class="step-num">Step 02</div>
+    <div class="step-label">Extract Insights</div>
+    <div class="step-desc">Auto-fetches Sitzungserkenntnisse</div>
+    <div class="step-icon">⚡</div>
+  </div>
+  <div class="step" id="step3">
+    <div class="step-num">Step 03</div>
+    <div class="step-label">Download CSV</div>
+    <div class="step-desc">Enriched with insights column</div>
+    <div class="step-icon">📥</div>
+  </div>
+</div>
+
+<!-- Upload -->
+<div class="card" id="upload-card">
+  <div class="card-title">Upload sessions CSV</div>
+  <div class="upload-area" id="upload-area">
+    <input type="file" id="file-input" accept=".csv" onchange="handleFile(event)" />
+    <div class="upload-icon">📄</div>
+    <div class="upload-title">Drop your CSV here or click to browse</div>
+    <div class="upload-hint">Needs columns: session_id, recording_link (or link), timestamp, product</div>
+  </div>
+  <div id="upload-status" style="margin-top:10px;font-size:12px;color:var(--muted);font-family:var(--mono);display:none;"></div>
+</div>
+
+<!-- API Key -->
+<div class="card">
+  <div class="card-title">Anthropic API key (fallback if direct fetch is blocked)</div>
+  <div class="field-row">
+    <label>API Key:</label>
+    <input type="password" id="apiKey" placeholder="sk-ant-... (optional — only needed if CORS blocks direct fetch)" />
+  </div>
+  <div style="margin-top:8px;" class="note">
+    The app tries to fetch Clarity pages directly using your browser session first (free). If blocked, it uses the Anthropic API (~$0.001 per session). Get a key at console.anthropic.com → API Keys.
+  </div>
+</div>
+
+<!-- Stats -->
+<div class="stats-row">
+  <div class="stat"><div class="stat-label">Loaded</div><div class="stat-value accent" id="stat-total">0</div></div>
+  <div class="stat"><div class="stat-label">Completed</div><div class="stat-value success" id="stat-done">0</div></div>
+  <div class="stat"><div class="stat-label">Remaining</div><div class="stat-value accent" id="stat-remaining">0</div></div>
+  <div class="stat"><div class="stat-label">ETA</div><div class="stat-value warning" id="stat-eta">--:--</div></div>
+</div>
+
+<!-- Progress -->
+<div class="card">
+  <div class="card-title">Progress</div>
+  <div class="progress-header">
+    <span id="progress-label">No sessions loaded</span>
+    <span id="progress-pct">0%</span>
+  </div>
+  <div class="progress-bg"><div class="progress-fill" id="progress-bar"></div></div>
+  <div class="progress-status" id="progress-status">Upload a CSV to get started</div>
+</div>
+
+<!-- Controls -->
+<div class="card">
+  <div class="card-title">Controls</div>
+  <div class="controls">
+    <button class="btn-primary" id="btn-start" onclick="startExtraction()" disabled>▶ Start Extraction</button>
+    <button class="btn-danger" id="btn-stop" onclick="stopExtraction()" disabled>■ Stop</button>
+    <button class="btn-success" id="btn-download" onclick="downloadCSV()" disabled>↓ Download CSV</button>
+    <button class="btn-secondary" onclick="testApiKey()">⚡ Test API Key</button>
+    <button class="btn-secondary" onclick="resetAll()">↺ Reset</button>
+  </div>
+</div>
+
+<!-- Log -->
+<div class="card">
+  <div class="card-title">Activity log</div>
+  <div class="log" id="log"></div>
+</div>
+
+<!-- Sessions table -->
+<div class="card" style="padding:0;overflow:hidden;">
+  <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--border);">
+    <div class="card-title" style="margin:0;">Sessions</div>
+    <span id="table-count" style="font-size:11px;font-family:var(--mono);color:var(--muted);">no sessions loaded</span>
+  </div>
+  <div class="table-wrap">
+    <div id="empty-state" class="empty-state">
+      <div class="big">📂</div>
+      Upload a CSV file to see sessions here
+    </div>
+    <table id="sessions-table" style="display:none;">
+      <thead>
+        <tr>
+          <th>Session ID</th>
+          <th>Timestamp</th>
+          <th>Product</th>
+          <th>Status</th>
+          <th>Sitzungserkenntnisse</th>
+        </tr>
+      </thead>
+      <tbody id="table-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+let SESSIONS = [];
+let running = false;
+let currentIndex = 0;
+let startTime = null;
+let fetchMode = 'unknown';
+const STORAGE_KEY = 'clarity_insights_v2';
+
+// ── CSV Parser ──────────────────────────────────────────────────────────────
+function parseCSV(text) {
+  const allLines = text.trim().split('\n');
+  if (allLines.length < 2) return [];
+
+  // Auto-detect header row: find the row that contains AT LEAST 2 known column names
+  // This avoids matching metadata rows like "Datumsbereich" which contain partial matches
+  const knownCols = ['session_id','recording_link','aufnahmelink','clarity-benutzer-id','sitzungsdauer','sitzungsklicks','seitenanzahl','timestamp','total_duration'];
+  let headerIdx = 0;
+  for (let i = 0; i < Math.min(allLines.length, 15); i++) {
+    const lower = allLines[i].toLowerCase();
+    const matchCount = knownCols.filter(c => lower.includes(c)).length;
+    if (matchCount >= 2) { headerIdx = i; break; }
+  }
+
+  const lines = allLines.slice(headerIdx);
+  
+  // Parse header - handle BOM
+  const headerLine = lines[0].replace(/^\uFEFF/, '');
+  const headers = parseCSVRow(headerLine).map(h => h.trim().toLowerCase().replace(/[^a-z0-9äöü]/g,'-').replace(/-+/g,'-'));
+  
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
+    const vals = parseCSVRow(lines[i]);
+    const row = {};
+    headers.forEach((h, idx) => { row[h] = (vals[idx] || '').trim(); });
+    rows.push(row);
+  }
+  return rows;
+}
+
+function parseCSVRow(line) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuotes && line[i+1] === '"') { current += '"'; i++; }
+      else inQuotes = !inQuotes;
+    } else if (ch === ',' && !inQuotes) {
+      result.push(current);
+      current = '';
+    } else {
+      current += ch;
+    }
+  }
+  result.push(current);
+  return result;
+}
+
+function handleFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const rows = parseCSV(e.target.result);
+      if (rows.length === 0) { showUploadStatus('No data found in CSV', 'error'); return; }
+      
+      // Auto-detect format: our export format OR Clarity native German export
+      // Clarity native headers: Datum, Zeit, Sitzungsdauer, Eintrags-URL, Clarity-Benutzer-ID, Seitenanzahl, Sitzungsklicks, Aufnahmelink
+      const isNativeExport = rows[0] && (rows[0]['clarity-benutzer-id'] !== undefined || rows[0]['aufnahmelink'] !== undefined);
+      
+      SESSIONS = rows.map(r => {
+        if (isNativeExport) {
+          // Clarity native German export format — skip metadata rows (no session id or link)
+          const id = r['clarity-benutzer-id'] || '';
+          const link = r['aufnahmelink'] || '';
+          if (!id || !link) return null;
+          return {
+            id,
+            link,
+            timestamp: (r['datum'] || '') + ' ' + (r['zeit'] || ''),
+            product: r['eintrags-url'] || '',
+            total_duration: r['sitzungsdauer'] || '',
+            active_duration: '',
+            pages_count: r['seitenanzahl'] || '',
+            total_clicks: r['sitzungsklicks'] || '',
+            dead_clicks: '',
+            insight: r['sitzungserkenntnisse'] || r['insight'] || ''
+          };
+        } else {
+          // Our standard export format
+          return {
+            id: r.session_id || r.id || r.sessionid || '',
+            link: r.recording_link || r.link || r.url || r.recording_url || '',
+            timestamp: r.timestamp || r.date || '',
+            product: r.product || r.page_title || r.title || '',
+            total_duration: r.total_duration || r.duration || '',
+            active_duration: r.active_duration || '',
+            pages_count: r.pages_count || r.pages || '',
+            total_clicks: r.total_clicks || r.clicks || '',
+            dead_clicks: r.dead_clicks || '',
+            insight: r.sitzungserkenntnisse || r.insight || ''
+          };
+        }
+      }).filter(s => s && s.id && s.link);
+      
+      if (SESSIONS.length === 0) {
+        showUploadStatus('Could not find session_id or recording_link columns in CSV', 'error');
+        return;
+      }
+
+      // Load any previously saved insights for these sessions
+      loadSavedInsights();
+      
+      currentIndex = 0;
+      updateStepUI(2);
+      showUploadStatus(`✓ Loaded ${SESSIONS.length} sessions (${SESSIONS.filter(s => s.insight && s.insight.length > 5).length} already have insights)`, 'ok');
+      
+      document.getElementById('btn-start').disabled = false;
+      document.getElementById('btn-download').disabled = false;
+      document.getElementById('sessions-table').style.display = 'table';
+      document.getElementById('empty-state').style.display = 'none';
+      document.getElementById('table-count').textContent = `${SESSIONS.length} sessions`;
+      document.getElementById('stat-total').textContent = SESSIONS.length;
+      
+      updateStats();
+      renderTable();
+      log('ok', 'UPLOAD', `Loaded ${SESSIONS.length} sessions from ${file.name}`);
+    } catch(err) {
+      showUploadStatus('Error parsing CSV: ' + err.message, 'error');
+    }
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+function showUploadStatus(msg, type) {
+  const el = document.getElementById('upload-status');
+  el.style.display = 'block';
+  el.style.color = type === 'error' ? 'var(--danger)' : type === 'ok' ? 'var(--success)' : 'var(--muted)';
+  el.textContent = msg;
+}
+
+// ── Drag & Drop ─────────────────────────────────────────────────────────────
+const uploadArea = document.getElementById('upload-area');
+uploadArea.addEventListener('dragover', e => { e.preventDefault(); uploadArea.classList.add('dragover'); });
+uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+uploadArea.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadArea.classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (file && file.name.endsWith('.csv')) {
+    const input = document.getElementById('file-input');
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    input.files = dt.files;
+    handleFile({ target: { files: [file] } });
+  }
+});
+
+// ── Progress persistence ─────────────────────────────────────────────────────
+function saveProgress() {
+  const insights = {};
+  SESSIONS.forEach(s => { if (s.insight) insights[s.id] = s.insight; });
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({insights, index: currentIndex})); } catch(e) {}
+}
+
+function loadSavedInsights() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (!saved) return;
+    const {insights} = JSON.parse(saved);
+    if (!insights) return;
+    let restored = 0;
+    SESSIONS.forEach(s => {
+      if (!s.insight && insights[s.id]) { s.insight = insights[s.id]; restored++; }
+    });
+    if (restored > 0) log('system', 'RESTORE', `Restored ${restored} saved insights from previous run`);
+  } catch(e) {}
+}
+
+function resetAll() {
+  running = false;
+  SESSIONS = [];
+  currentIndex = 0;
+  document.getElementById('btn-start').disabled = true;
+  document.getElementById('btn-stop').disabled = true;
+  document.getElementById('btn-download').disabled = true;
+  document.getElementById('sessions-table').style.display = 'none';
+  document.getElementById('empty-state').style.display = 'block';
+  document.getElementById('upload-status').style.display = 'none';
+  document.getElementById('table-count').textContent = 'no sessions loaded';
+  document.getElementById('file-input').value = '';
+  document.getElementById('stat-total').textContent = '0';
+  document.getElementById('stat-done').textContent = '0';
+  document.getElementById('stat-remaining').textContent = '0';
+  document.getElementById('stat-eta').textContent = '--:--';
+  document.getElementById('progress-bar').style.width = '0%';
+  document.getElementById('progress-pct').textContent = '0%';
+  document.getElementById('progress-label').textContent = 'No sessions loaded';
+  document.getElementById('progress-status').textContent = 'Upload a CSV to get started';
+  document.getElementById('table-body').innerHTML = '';
+  setMode('idle');
+  updateStepUI(1);
+  log('system', 'RESET', 'All data cleared');
+}
+
+// ── UI Helpers ───────────────────────────────────────────────────────────────
+function updateStepUI(active) {
+  [1,2,3].forEach(i => {
+    const el = document.getElementById('step' + i);
+    el.className = 'step' + (i === active ? ' active' : i < active ? ' done' : '');
+  });
+}
+
+function log(type, id, msg) {
+  const el = document.getElementById('log');
+  const now = new Date().toTimeString().slice(0,8);
+  const cls = type === 'ok' ? 'ok' : type === 'err' ? 'err' : type === 'warn' ? 'warn' : '';
+  el.innerHTML += `<div class="log-entry"><span class="log-time">${now}</span><span class="log-id">${id}</span><span class="log-msg ${cls}">${msg}</span></div>`;
+  el.scrollTop = el.scrollHeight;
+}
+
+function setStatus(msg) { document.getElementById('progress-status').textContent = msg; }
+
+function setMode(mode) {
+  const badge = document.getElementById('mode-badge');
+  if (mode === 'direct') { badge.className = 'mode-badge mode-direct'; badge.innerHTML = '<span class="dot pulse"></span> Direct fetch'; }
+  else if (mode === 'api') { badge.className = 'mode-badge mode-api'; badge.innerHTML = '<span class="dot pulse"></span> API mode'; }
+  else { badge.className = 'mode-badge mode-idle'; badge.innerHTML = '<span class="dot"></span> Idle'; }
+}
+
+function updateStats() {
+  if (SESSIONS.length === 0) return;
+  const done = SESSIONS.filter(s => s.insight && s.insight.length > 5 && !s.insight.startsWith('ERROR')).length;
+  const remaining = SESSIONS.length - done;
+  document.getElementById('stat-done').textContent = done;
+  document.getElementById('stat-remaining').textContent = remaining;
+  const pct = Math.round((done / SESSIONS.length) * 100);
+  document.getElementById('progress-bar').style.width = pct + '%';
+  document.getElementById('progress-pct').textContent = pct + '%';
+  document.getElementById('progress-label').textContent = `${done} of ${SESSIONS.length} extracted`;
+  if (startTime && done > 0) {
+    const elapsed = (Date.now() - startTime) / 1000;
+    const rate = done / elapsed;
+    const etaSecs = remaining / rate;
+    const etaMin = Math.floor(etaSecs / 60);
+    const etaSec = Math.floor(etaSecs % 60);
+    document.getElementById('stat-eta').textContent = `${etaMin}:${String(etaSec).padStart(2,'0')}`;
+  }
+}
+
+function renderTable() {
+  const tbody = document.getElementById('table-body');
+  tbody.innerHTML = SESSIONS.map((s, i) => {
+    const hasInsight = s.insight && s.insight.length > 5 && !s.insight.startsWith('ERROR');
+    const isError = s.insight && s.insight.startsWith('ERROR');
+    const isActive = running && i === currentIndex;
+    const statusEl = isActive
+      ? '<span class="status-pill pill-active"><span class="dot pulse"></span>fetching</span>'
+      : hasInsight ? '<span class="status-pill pill-done">✓ done</span>'
+      : isError ? '<span class="status-pill pill-error">error</span>'
+      : '<span class="status-pill pill-pending">pending</span>';
+    const insightPreview = hasInsight ? s.insight.substring(0, 110) + (s.insight.length > 110 ? '…' : '') : (isError ? s.insight : '—');
+    const insightClass = hasInsight ? '' : ' style="color:var(--muted);font-style:italic"';
+    return `<tr id="row-${s.id}">
+      <td class="td-id">${s.id}</td>
+      <td class="td-ts">${s.timestamp}</td>
+      <td class="td-product" title="${s.product}">${s.product || '—'}</td>
+      <td>${statusEl}</td>
+      <td class="td-insight"${insightClass}>${insightPreview}</td>
+    </tr>`;
+  }).join('');
+}
+
+function scrollToRow(id) {
+  const row = document.getElementById('row-' + id);
+  if (row) row.scrollIntoView({block: 'nearest', behavior: 'smooth'});
+}
+
+// ── Fetch logic ──────────────────────────────────────────────────────────────
+async function tryDirectFetch(url) {
+  const resp = await fetch(url, {credentials: 'include', mode: 'cors'});
+  if (!resp.ok) throw new Error('HTTP ' + resp.status);
+  const html = await resp.text();
+  return extractInsightFromHTML(html);
+}
+
+function extractInsightFromHTML(html) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+  const allText = doc.body ? (doc.body.innerText || doc.body.textContent) : '';
+  // Look for German insight paragraph starting with "Der Nutzer"
+  const patterns = [
+    /Der Nutzer[\s\S]{20,600}?(?=Diese Sitzung|var ig=|\n\n)/,
+    /Der Besucher[\s\S]{20,600}?(?=Diese Sitzung|var ig=|\n\n)/,
+    /Die Nutzerin[\s\S]{20,600}?(?=Diese Sitzung|var ig=|\n\n)/,
+  ];
+  for (const p of patterns) {
+    const m = allText.match(p);
+    if (m) return m[0].trim().substring(0, 700);
+  }
+  return null;
+}
+
+async function tryAPIFetch(url) {
+  let apiKey = document.getElementById('apiKey').value.trim();
+  if (!apiKey && window.__ANTHROPIC_KEY__) apiKey = window.__ANTHROPIC_KEY__;
+  if (!apiKey) throw new Error('No API key — enter one above');
+
+  // Step 1: Ask Claude to fetch the Clarity page using web_search tool
+  // First try direct fetch of Clarity page
+  let insight = null;
+  try {
+    const pageRes = await fetch(url, { credentials: 'include' });
+    const html = await pageRes.text();
+    const patterns = [/Der Nutzer[^<]{20,800}/, /Die Nutzerin[^<]{20,800}/, /Der Besucher[^<]{20,800}/, /Die Besucherin[^<]{20,800}/];
+    for (const pattern of patterns) {
+      const match = html.match(pattern);
+      if (match) {
+        insight = match[0].replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/\s+/g,' ').trim().substring(0,700);
+        break;
+      }
+    }
+  } catch(e) { /* CORS blocked, fall through to API */ }
+
+  if (insight) return insight;
+
+  // Fall back to Claude API
+  const response = await fetch('/api/anthropic/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-calls': 'true' },
+    body: JSON.stringify({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 400,
+      tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+      system: 'Extract ONLY the Sitzungserkenntnisse paragraph from this Clarity session page — a German summary starting with "Der Nutzer", "Die Nutzerin", "Der Besucher" or similar. Return ONLY that text. If not found return: NOT_FOUND',
+      messages: [{ role: 'user', content: 'Extract the Sitzungserkenntnisse from: ' + url }]
+    })
+  });
+  const data = await response.json();
+  if (data.error) throw new Error(data.error.message.substring(0, 120));
+  const text = data.content?.filter(b => b.type === 'text').map(b => b.text).join('').trim();
+  if (!text || text === 'NOT_FOUND') return null;
+  return text;
+}
+
+// ── Main extraction loop ─────────────────────────────────────────────────────
+async function startExtraction() {
+  if (running || SESSIONS.length === 0) return;
+  running = true;
+  startTime = Date.now();
+  document.getElementById('btn-start').disabled = true;
+  document.getElementById('btn-stop').disabled = false;
+  document.getElementById('btn-download').disabled = true;
+  updateStepUI(2);
+  log('system', 'START', `Starting from session index ${currentIndex}`);
+
+  // Test direct fetch
+  let canDirect = false;
+  setStatus('Testing direct fetch to Clarity...');
+  try {
+    const testSession = SESSIONS.find(s => !s.insight || s.insight.length < 5);
+    if (testSession) {
+      const result = await tryDirectFetch(testSession.link);
+      canDirect = true;
+      setMode('direct');
+      log('ok', 'TEST', 'Direct fetch works — running free mode');
+      // Save the result so we don't re-fetch it
+      if (result) testSession.insight = result;
+    }
+  } catch(e) {
+    setMode('api');
+    log('warn', 'TEST', `Direct fetch blocked — using API fallback`);
+    // Verify API key is present before starting
+    const apiKey = document.getElementById('apiKey').value.trim();
+    if (!apiKey) {
+      running = false;
+      setStatus('ERROR: Direct fetch blocked and no API key provided. Please enter your Anthropic API key above.');
+      log('err', 'CONFIG', 'No API key provided. Get one at console.anthropic.com');
+      document.getElementById('btn-start').disabled = false;
+      document.getElementById('btn-stop').disabled = true;
+      setMode('idle');
+      return;
+    }
+  }
+
+  for (let i = currentIndex; i < SESSIONS.length; i++) {
+    if (!running) break;
+    currentIndex = i;
+    const s = SESSIONS[i];
+
+    if (s.insight && s.insight.length > 5 && !s.insight.startsWith('ERROR')) {
+      updateStats();
+      continue;
+    }
+
+    renderTable();
+    scrollToRow(s.id);
+    setStatus(`Fetching ${s.id} (${i+1}/${SESSIONS.length})...`);
+
+    try {
+      let insight = null;
+      if (canDirect) {
+        try { insight = await tryDirectFetch(s.link); } catch(e) { canDirect = false; setMode('api'); }
+      }
+      if (!insight) insight = await tryAPIFetch(s.link);
+
+      s.insight = insight || 'NOT_FOUND';
+      if (insight) log('ok', s.id, insight.substring(0, 80) + '...');
+      else log('warn', s.id, 'No insight found on this page');
+    } catch(e) {
+      s.insight = 'ERROR: ' + e.message.substring(0, 80);
+      log('err', s.id, e.message.substring(0, 80));
+    }
+
+    updateStats();
+    saveProgress();
+    await new Promise(r => setTimeout(r, canDirect ? 600 : 1500));
+  }
+
+  running = false;
+  setMode('idle');
+  document.getElementById('btn-start').disabled = false;
+  document.getElementById('btn-stop').disabled = true;
+  document.getElementById('btn-download').disabled = false;
+  updateStepUI(3);
+
+  const done = SESSIONS.filter(s => s.insight && s.insight.length > 5 && !s.insight.startsWith('ERROR')).length;
+  setStatus(`Done! ${done}/${SESSIONS.length} insights extracted. Click Download CSV.`);
+  log('ok', 'DONE', `Complete — ${done} insights extracted`);
+  renderTable();
+}
+
+function stopExtraction() {
+  running = false;
+  document.getElementById('btn-start').disabled = false;
+  document.getElementById('btn-stop').disabled = true;
+  document.getElementById('btn-download').disabled = false;
+  setMode('idle');
+  setStatus('Paused. Click Start to resume from where you left off.');
+  log('warn', 'STOP', `Paused at index ${currentIndex}`);
+}
+
+// ── CSV Export ───────────────────────────────────────────────────────────────
+function downloadCSV() {
+  if (SESSIONS.length === 0) return;
+  const headers = ['session_id','timestamp','product','total_duration','active_duration','pages_count','total_clicks','dead_clicks','recording_link','sitzungserkenntnisse'];
+  const rows = SESSIONS.map(s => [
+    s.id, s.timestamp, s.product, s.total_duration, s.active_duration,
+    s.pages_count, s.total_clicks, s.dead_clicks, s.link,
+    (s.insight && !s.insight.startsWith('ERROR') && s.insight !== 'NOT_FOUND') ? s.insight : ''
+  ].map(v => '"' + String(v||'').replace(/"/g, '""') + '"').join(','));
+
+  const csv = [headers.join(','), ...rows].join('\n');
+  const blob = new Blob(['\uFEFF' + csv], {type: 'text/csv;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'clarity_sessions_with_insights.csv'; a.click();
+  URL.revokeObjectURL(url);
+  log('ok', 'EXPORT', `Downloaded CSV with ${SESSIONS.length} sessions`);
+}
+
+async function testApiKey() {
+  let apiKey = document.getElementById('apiKey').value.trim();
+  // Fall back to build-time injected key
+  if (!apiKey && window.__ANTHROPIC_KEY__) apiKey = window.__ANTHROPIC_KEY__;
+  if (!apiKey) { log('err', 'TEST', 'No API key entered'); return; }
+  log('system', 'TEST', 'Testing API key...');
+  try {
+    const r = await fetch('/api/anthropic/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-calls': 'true' },
+      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 10, messages: [{ role: 'user', content: 'Hi' }] })
+    });
+    const rawText = await r.text();
+    let d;
+    try { d = JSON.parse(rawText); } catch(e) {
+      log('err', 'TEST', 'Could not parse response: ' + rawText.substring(0, 100));
+      return;
+    }
+    if (d.error) { log('err', 'TEST', 'API error: ' + d.error.message); return; }
+    log('ok', 'TEST', '✓ API key works! Ready to extract insights.');
+  } catch(e) {
+    log('err', 'TEST', 'Network error: ' + e.message);
+  }
+}
+
+window.__ANTHROPIC_KEY__ = '__ANTHROPIC_API_KEY__';
+// Init
+log('system', 'INIT', 'App ready — upload a CSV to begin');
+</script>
+</body>
+</html>
